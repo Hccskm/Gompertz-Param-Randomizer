@@ -1,0 +1,88 @@
+!pip install schedule==1.1.0
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.optimize import curve_fit
+import random
+import schedule
+import time
+
+# Lista para armazenar valores anteriores de 'r^2' e garantir resultados variados
+valores_anteriores_r = []
+
+def rquad(residuos_final,Y):
+    # Calculando o R^2
+    ss_res = np.sum(residuos_final ** 2)
+    ss_tot = np.sum((Y - np.mean(Y)) ** 2)
+    r2 = 1 - (ss_res / ss_tot)
+    return r2
+
+def executar():
+    # Dados fornecidos Ex.: X==Dias Y== Numero de Carros
+    X = np.array([]) #Coloque seus Dados aqui
+    Y = np.array([]) #Coloque seus Dados Iniciais aqui
+
+
+    # Função de Gompertz Utilizada nesse caso: y = k * (a/k)^(e^(-r*x))
+    def modelo_gompertz(x, a, b, c):
+        if b/a == 0:
+          return np.zeros(x.shape) #cria um array de zeros do tamanho de x (evita o problema de um possivel erro ao fazer b/a)
+        else:
+          return a * (b/a) ** (np.exp(-c*x))
+    random.seed(time.time())
+    # Valores iniciais para os parâmetros [k, a, r], definimos valores randomicos dentro dos limites superiores e inferiores
+    k=random.uniform(0, 1)
+    a=random.uniform(0, 7)
+    r=random.uniform(0, 0.1)
+    params_iniciais = [k,a,r]
+
+
+    # Ajustando o modelo de Gompertz usando curve_fit e garantindo q os valores de r^2 sejam diferentes
+    while True:
+      # Aqui pode-se alterar os limites inferiores e superiores, respectivamentes, do modelo de gompertz
+      params_gompertz, _ = curve_fit(modelo_gompertz, X, Y, p0=params_iniciais, maxfev=int(1e9), bounds=([0, 0, 0], [1, 7 ,np.inf ]))
+      residuos_final = Y - modelo_gompertz(X, *params_gompertz)
+      r2 = rquad(residuos_final,Y)
+      r2 = round(r2, 4)
+      if r2 not in valores_anteriores_r :
+        valores_anteriores_r.append(r2)
+        break
+      else:
+        params_iniciais = [random.uniform(0, 1), random.uniform(0, 7), random.uniform(0, 0.1)]
+
+      # Condicao de plot dos graficos
+    if r2 >= 0.8:
+      # Cria o gráfico com barras de erro
+
+      # Imprimindo os parâmetros ajustados
+      print(f"Parâmetros ajustados (Modelo de Gompertz): k = {params_gompertz[0]}, a = {params_gompertz[1]}, r = {params_gompertz[2]}")
+
+      # Calculando os resíduos para os dados observados
+      residuos_final = Y - modelo_gompertz(X, *params_gompertz)
+
+      # Calculando o erro absoluto dos resíduos
+      erro_absoluto = np.max(np.abs(residuos_final))
+      print("Erro:", erro_absoluto)
+
+      # Calculando o RSME
+      rsme = np.sqrt(np.mean(residuos_final ** 2))
+
+      # Gerando os valores do modelo ajustado para um range de x mais denso
+      x_modelo = np.linspace(X.min(), X.max(), 100) #Talvez seja necessario alterar aqui dependendo dos seus valores e da função de gompertz
+      y_modelo = modelo_gompertz(x_modelo, *params_gompertz)
+      plt.figure(figsize=(10, 6))
+      plt.errorbar(X, Y, yerr=erro_absoluto, fmt='o', color='red', label='Dados Observados', capsize=5)
+      plt.plot(x_modelo, y_modelo, label=f"Modelo de Gompertz", color='blue')
+      plt.xlabel('Dias')
+      plt.ylabel('Valores Dados')
+      plt.title(f'Ajuste do Modelo de Gompertz\nR²= {r2:.4f}\nRSME = {rsme:.5f} ')
+      plt.legend()
+      plt.grid(True)
+      plt.show()
+
+# Agende a execução do código a cada X segundos
+schedule.every(1).seconds.do(executar)
+
+# Loop infinito para manter o agendamento ativo
+while True:
+    schedule.run_pending()
+    time.sleep(0)
